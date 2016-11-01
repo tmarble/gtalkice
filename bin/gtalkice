@@ -1,0 +1,54 @@
+#!/bin/sh
+
+set -x
+
+DOCKER_USER=browser
+DOCKER_UID=1000
+DOCKER_GID=100
+
+DISPLAY=${DISPLAY:-:0}
+HOSTNAME=$(hostname)
+# HOSTNAME=cerise-lan
+
+DOCKER=$HOME/Docker
+USERCONFIG=$DOCKER/$DOCKER_USER/.config
+DOWNLOADS=$USERCONFIG/Downloads
+PULSE=$USERCONFIG/pulse
+MOZILLA=$USERCONFIG/.mozilla
+XAUTHORITY=$USERCONFIG/.Xauthority
+
+mkdir -p $DOWNLOADS
+mkdir -p $PULSE
+mkdir -p $MOZILLA
+touch $XAUTHORITY
+
+# Allow the container to use sound
+# assumes local pulse audio has been configured for remote access
+# make sure $HOME/.config/pulse/cookie exists AND copy it in!
+if [ ! -e $HOME/.config/pulse/cookie ]; then
+    echo "error: pulse cookie not found"
+    exit 1
+fi
+cp $HOME/.config/pulse/cookie $PULSE
+
+# Allow container to open new windows on the host
+xhost +
+xauth nextract - $DISPLAY | xauth -f $XAUTHORITY nmerge -
+
+chmod -R g+w,g+r $DOCKER
+
+# start chrome
+docker run -it \
+       --rm=true \
+       --device /dev/video0 \
+       -v /etc/localtime:/etc/localtime \
+       -v /tmp/.X11-unix:/tmp/.X11-unix \
+       -v $USERCONFIG:/home/$DOCKER_USER/.config \
+       -e DISPLAY=unix$DISPLAY \
+       -e XAUTHORITY=/home/$DOCKER_USER/.config/.Xauthority \
+       -e PULSE_SERVER=$HOSTNAME \
+       -e DOCKER_USER=$DOCKER_USER \
+       -e DOCKER_UID=$DOCKER_UID \
+       -e DOCKER_GID=$DOCKER_GID \
+       --name gtalkice6 \
+       tmarble/gtalkice:latest $@
